@@ -1,0 +1,34 @@
+#imports/envi
+!pip install scanpy
+!pip install pydeseq2
+
+from pydeseq2.dds import DeseqDataSet
+from pydeseq2.ds import DeseqStats
+
+import scanpy as sc
+import pandas as pd
+from scipy.sparse import issparse
+
+#data preprocessing
+adata = sc.read('/content/drive/My Drive/MGH/aci_dims1to10_06_19_25_type_anno_precomp_v3.h5ad') 
+
+X_raw = adata.raw.X
+
+# Convert to dense if it's sparse
+if issparse(X_raw):
+    X_raw = X_raw.toarray()
+
+# Make a DataFrame
+df_raw = pd.DataFrame(
+    X_raw,
+    index=adata.obs_names,
+    columns=adata.raw.var_names
+)
+
+df_raw
+
+df_raw = df_raw[df_raw.sum(axis = 1) > 0]
+df_raw
+
+df_raw = df_raw.T
+df_raw
