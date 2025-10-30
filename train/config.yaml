@@ -1,0 +1,54 @@
+# Default configuration derived from train.py
+
+data:
+  # Keys within AnnData
+  pca_key: X_pca            # adata.obsm key for PCA features
+  pcs_loadings_key: PCs     # adata.varm key for PCA loadings
+  label_key: AD             # adata.obs column for case/control
+  donor_key: orig.ident     # adata.obs column for donor IDs
+  ad_label: AD
+  control_label: Control
+
+output:
+  models_subdir: models
+  gene_importance_subdir: gene_importance
+  peak_importance_subdir: peak_importance
+  metrics_filename: fold_metrics.csv
+
+training:
+  seed: 42                  # torch and numpy seeds
+  batch_size: 256
+  max_epochs: 100
+  lr: 1e-3                 # learning rate
+  patience: 5               # early stopping patience (epochs)
+  val_split: 0.2            # validation split fraction
+  val_random_state: 42
+  stratify: true
+
+scheduler:
+  use_scheduler: true
+  save_best_model: true
+  early_stop_on_plateau: true
+  name: reduce_lr_on_plateau
+  mode: min
+  factor: 0.5
+  patience: 5
+  min_lr: 1e-6
+
+loss:
+  name: bce_with_logits     # nn.BCEWithLogitsLoss
+
+model:
+  hidden_sizes: [64, 64] # default = [64, 64]
+  activation: elu
+
+cross_validation:
+  seed: 42
+
+shap:
+  background_kmeans: 100     # k-means background size
+
+metrics:
+  threshold_selection: youden  # argmax(tpr - fpr)
+  report_first_n_folds: 5
+
