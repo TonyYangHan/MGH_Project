@@ -1,6 +1,6 @@
 # MGH_Project
 
-Analyze multi-omics profiles from Massachusetts General Hospital (MGH) Alzheimer’s disease (AD) brain samples. This repo provides:
+Analyze 10x single-nucleus multi-omics sequencing data from Massachusetts General Hospital (MGH) Alzheimer’s disease (AD) brain samples. This repo provides:
 
 - Reproducible training code to build a simple neural network classifier on PCA features from AnnData (.h5ad)
 - Cross-donor evaluation and model checkpointing
@@ -103,13 +103,26 @@ python train/train.py /path/to/oligo_mgh_atac.h5ad atac ./results/oligo_atac --c
 - Passes `train/config.yaml` if present
 - Limits concurrency via `MAX_JOBS`, which indicates how many jobs can run simultaneously at max.
 
-Run it as:
+Using it efficiently:
 
 ```bash
+# Default behavior (no edits): looks for inputs under train/adata_objects/ and writes to train/result/
 bash train/run_all.sh
 ```
 
-Customize `AD_DIR`, `CELL_TYPES`, and `MAX_JOBS` inside the script to match your data and hardware.
+Tips and customization:
+
+- Inputs and outputs:
+	- Place your precomputed `.h5ad` files in `train/adata_objects/` with names like `<celltype>_mgh_<rna|atac>_*.h5ad`, or edit `AD_DIR` to point to your project-level `adata_objects/` folder.
+	- By default results go to `train/result/<celltype>/<rna|atac>/`. Edit `RESULT_BASE` to write to `result/` at project root instead.
+- Cell types and modalities:
+	- Edit `CELL_TYPES=("oligo" "microglia" "astro" "L23_IT" "L4_IT" "L5_IT" "L6_IT" "Pvalb" "Sst" "Vip")` to match your available data and file-name prefixes.
+	- The script scans both `rna` and `atac` for each cell type; remove a modality from the inner loop if not needed.
+- Concurrency and hardware:
+	- Each training uses GPU when available and runs SHAP; on a single GPU, set `MAX_JOBS=1` to avoid OOM. Increase gradually if you have multiple GPUs or ample memory.
+	- The script throttles background jobs and waits at the end. You can monitor progress via the echoed “Running:” lines.
+- Quick sanity check:
+	- Start with one cell type and `MAX_JOBS=1` to validate paths and naming, then widen to all cell types.
 
 
 ## Preprocessing: purpose and usage
@@ -171,12 +184,121 @@ Notes:
 - Preprocessing produces PCA embeddings (`X_pca`) and loadings (`varm["PCs"]`) that `train/train.py` expects by default; if you change key names, update `train/config.yaml` accordingly.
 
 
+## End-to-end: from raw AnnData to results
+
+If you start with a raw AnnData object containing raw counts, follow these steps.
+
+1) Preprocess to generate precomputed AnnData
+
+- Create minimal folders used by the notebooks/scripts:
+
+```bash
+mkdir -p preprocessing/mgh_all_obj_components
+mkdir -p adata_objects
+```
+
+- Export Seurat (if your source is an RDS Seurat object) in R:
+
+```r
+# In R (e.g., inside preprocessing_R.ipynb)
+source("preprocessing/utils.R")
+mgh_all <- readRDS("/path/to/MGH.ALL.rds")
+dir.create("preprocessing/mgh_all_obj_components", showWarnings = FALSE)
+convert_seurat_2(mgh_all, "preprocessing/mgh_all_obj_components/", "MGH_atac_all")
+```
+
+- Assemble and precompute in Python (inside `preprocessing/preprocessing_python.ipynb`):
+	- Set input/output paths to write precomputed files directly to the project-level `adata_objects/` folder (no need for `train/adata_objects/`):
+
+```python
+in_dir = "preprocessing/mgh_all_obj_components"  # from R step above
+prefix = "MGH_atac_all"
+adata = ... # assemble as shown in notebook
+
+# Per-cell-type precompute; write to adata_objects/
+result_dir = "adata_objects/"
+# This cell will write files like: adata_objects/<cell_alias>_mgh_<rna|atac>_v3_precomp.h5ad
+```
+
+2) Train the model and save results
+
+- Single run:
+
+```bash
+python train/train.py adata_objects/oligo_mgh_rna_v3_precomp.h5ad rna result/oligo/rna --config train/config.yaml
+```
+
+- Batch across multiple cell types and modalities with the helper script:
+
+```bash
+mkdir -p adata_objects result
+# Option A: use run_all.sh as-is (expects train/adata_objects and writes train/result)
+bash train/run_all.sh
+
+# Option B: if you want to keep inputs under adata_objects/ and outputs under result/ at project root,
+# edit train/run_all.sh and set:
+#   AD_DIR="$(git rev-parse --show-toplevel)/adata_objects"  # or absolute path
+#   RESULT_BASE="$(git rev-parse --show-toplevel)/result"
+```
+
+Notes on folders created/required:
+- `train/train.py` will create the provided `<result_dir>` and the needed subfolders: `models/` and either `gene_importance/` or `peak_importance/`.
+- `train/run_all.sh` by default expects inputs under `train/adata_objects/` and writes to `train/result/<cell_type>/<rna|atac>/`. If you prefer `adata_objects/` and `result/` at project root, update `AD_DIR` and `RESULT_BASE` in the script (see Option B above) or create a symlink.
+
+3) Interpret, visualize performance, and determine feature cutoffs
+
+Primary option (recommended): use `interpretation/Eval_general.ipynb` to run the latest analysis automatically across all cell types and both modalities in one pass.
+
+- Set the paths and lists at the top of the notebook:
+
+```python
+# If your adata_objects/ and result/ live at the project root, set:
+root_dir = ""  # empty string means paths like "result/<ct>/<mod>/" and "adata_objects/..."
+
+# Otherwise, point root_dir to a prefix folder that contains both adata_objects/ and result/
+# e.g., root_dir = "combined_analysis/"
+
+cell_types_alias = ["oligo", "astro", "microglia", "L23_IT", "L4_IT", "L5_IT", "L6_IT", "Pvalb", "Sst", "Vip"]
+mods = ["rna", "atac"]
+```
+
+What it expects and produces per cell type/modality:
+- Reads: `{root_dir}adata_objects/<ct>_mgh_<mod>_v3_precomp.h5ad` and `{root_dir}result/<ct>/<mod>/fold_metrics.csv`, plus `{feature_name}_importance/` and `models/` subfolders under `{root_dir}result/<ct>/<mod>/`.
+- Writes in `{root_dir}result/<ct>/<mod>/`:
+	- `fold_metrics_plot.png`, `donor_avg_metrics_plot.png`
+	- `cell_proba.csv` and per-donor violin plots (`donor_proba_*.png`)
+	- `common_{gene|peak}_importance.csv` and importance score plots
+	- p-value/FDR plots for enrichment-based cutoff selection
+- Also writes a summary CSV across cell types: `{root_dir}cell_types_feature_cutoffs.csv` with elbow- and p-value-based cutoffs.
+
+Alternative (single analysis): if you prefer to run one cell type and one modality at a time, use `interpretation/Evaluation_interpretation.ipynb`. Set `ct`, `mod`, `adata` path, and `result_dir` at the top as shown above, then run through the cells for that pair.
+
+4) Generate and visualize cell probabilities for both modalities
+
+If you use `Eval_general.ipynb`, probabilities for both RNA and ATAC are generated automatically for all configured cell types. If you use the single-analysis notebook, repeat for `mod = "rna"` and `mod = "atac"`:
+
+```python
+# RNA
+ct, mod = "oligo", "rna"
+adata = sc.read_h5ad("adata_objects/oligo_mgh_rna_v3_precomp.h5ad")
+result_dir = "result/oligo/rna/"
+
+# ATAC
+ct, mod = "oligo", "atac"
+adata = sc.read_h5ad("adata_objects/oligo_mgh_atac_v3_precomp.h5ad")
+result_dir = "result/oligo/atac/"
+```
+
+Use the same workflow in the notebook to load models from `result_dir/models/`, read thresholds from `fold_metrics.csv`, compute cell-wise probabilities, and plot donor-level violins and region-stratified distributions.
+
+
 ## Interpretation notebooks
 
 Open the notebooks in `interpretation/` for downstream analysis:
 
-- `Evaluation_interpretation.ipynb`: Summarizes model metrics and visualizes results.
-- `ML_interpret_joint_torch.ipynb`: Generate and visualize single-cell AD probabilities for RNA and ATAC modalities.
+- `Eval_general.ipynb` (recommended): Runs the most up-to-date, automated analysis across all configured cell types and both modalities in one run. Set `root_dir`, `cell_types_alias`, and `mods` at the top to match your folder layout; it reads precomputed inputs and training outputs, generates metrics/plots, computes per-cell probabilities, aggregates SHAP importances, and derives feature cutoffs. Use this as your main entry point.
+- `Evaluation_interpretation.ipynb`: For running one cell type and one modality at a time. Set `ct`, `mod`, `adata` path, and `result_dir` accordingly.
+- `ML_interpret_joint_torch.ipynb`: Generate and visualize single-cell AD probabilities and downstream plots; useful for exploratory ML/biology interpretation.
 
 
 ## Notes and tips
