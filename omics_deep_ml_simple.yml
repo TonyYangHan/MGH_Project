@@ -1,0 +1,32 @@
+name: omics_deep_ml
+channels:
+  - conda-forge
+  - defaults
+  - bioconda
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - python=3.12
+  - tensorflow-gpu
+  - shap
+  - scikit-learn
+  - scanpy
+  - pandas
+  - jupyter
+  - optuna
+  - mygene
+  - muon
+  - bedtools
+  - pyranges
+  - transformers
+  - pyfaidx
+  - matplotlib-venn
+  - python-duckdb
+  - wandb
+  - gseapy
+  - samtools
+  - ucsc-fetchchromsizes
+  - ucsc-bedgraphtobigwig
+  - ucsc-bigwigtobedgraph
+  - ucsc-bedtobigbed
+  - ucsc-liftover
