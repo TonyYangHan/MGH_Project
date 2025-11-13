@@ -2,10 +2,10 @@
 
 Analyze 10x single-nucleus multi-omics sequencing data from Massachusetts General Hospital (MGH) Alzheimer’s disease (AD) brain samples. This repo provides:
 
-- Reproducible training code to build a simple neural network classifier on PCA features from AnnData (.h5ad)
-- Cross-donor evaluation and model checkpointing
-- SHAP-based interpretation to attribute model predictions back to genes or peaks
-- Notebooks for interpreting results from both ML and biological perspectives
+- Reproducible training code to build and train a simple neural network classifier on PCA features from single-nucleus sequencing AnnData objects(.h5ad) with cross validation
+- SHAP-based interpretation to calculate the contribution of each gene or peak to the classification of whether cells are from AD or Healthy donor
+- Notebooks for interpreting results from both ML performance metrics and biological meanings
+- Determine the genes and peaks that are considered important between cells from AD and healthy donors
 
 
 ## What’s in this repository
@@ -31,7 +31,7 @@ conda activate omics_deep_ml
 
 Notes:
 - The environment targets GPU acceleration where available. CPU will also work but be slower.
-- If you already have an environment, you can inspect `omics_deep_ml.yml` and install only the bits you need.
+- If you already have an environment, you can inspect `omics_deep_ml_simple.yml` and install only the bits you need.
 
 
 ## Data expectations for training
@@ -41,7 +41,7 @@ Notes:
 - PCA features in `adata.obsm["X_pca"]` (configurable via `data.pca_key`)
 - PCA loadings in `adata.varm["PCs"]` (configurable via `data.pcs_loadings_key`)
 - Sample/label metadata in `adata.obs`, including:
-	- Case/control label column (default `AD` with values `AD` and `Control`)
+	- Disease/control label column (default `AD` with values `AD` and `Control`)
 	- Donor identifier column (default `orig.ident`)
 
 All of the above keys and labels can be changed in `train/config.yaml` or via a custom config passed to `train.py`.
@@ -74,7 +74,7 @@ Key configuration knobs (see `train/config.yaml`):
 - Output subdirs and filenames: `output.*`
 
 Outputs written to `<result_dir>`:
-- `models/`: `fold{i}_model.pt` PyTorch weights for each validation fold
+- `models/`: `fold{i}_model.pt` PyTorch weights for the best model (determined by validation loss) of each validation fold
 - `gene_importance/` or `peak_importance/`: CSV files like `{gene|peak}_shap_importance_fold{i}.csv` with per-feature importances
 - `fold_metrics.csv`: Per-fold AUROC, Accuracy, threshold, and donor-pair index
 
@@ -82,8 +82,9 @@ Evaluation protocol (built into `train.py`):
 - Enumerates all unique donor pairs {AD, Ctrl} and performs cross-validation by holding out pairs.
 - Selects a classification threshold on the validation set using Youden’s J statistic (argmax of TPR − FPR).
 - Reports AUROC and accuracy for the held-out donor pair.
+- Note: Accuracy metrics is just for a reference. Since cells are donor-level labeled (i.e. all cells from an AD donor are labeled as "AD"), the discussion of accuracy that originates from hard-labeling of cells would be meaningless. Also, it is very difficult to select a correct threshold to obtain the hard labels. 
 
-Examples:
+Examples to run the script on one modality for one cell type:
 
 ```bash
 # Single run on RNA
