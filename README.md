@@ -1,6 +1,6 @@
 # MGH_Project
 
-Analyze 10x single-nucleus multi-omics sequencing data from Massachusetts General Hospital (MGH) Alzheimer’s disease (AD) brain samples. This repo provides:
+Analyze 10x single-nucleus multi-omics sequencing data from Massachusetts General Hospital (MGH) human Alzheimer’s disease (AD) brain samples. This repo provides:
 
 - Reproducible training code to build and train a simple neural network classifier on PCA features from single-nucleus sequencing AnnData objects(.h5ad) with cross validation
 - SHAP-based interpretation to calculate the contribution of each gene or peak to the classification of whether cells are from AD or Healthy donor
