@@ -1,0 +1,55 @@
+# Configuration for train_v2.py using explicit AnnData split groups.
+
+data:
+  # Keys within AnnData
+  pca_key: X_pca            # adata.obsm key for PCA features
+  pcs_loadings_key: PCs     # adata.varm key for PCA loadings
+  label_key: genotype       # adata.obs column for case/control
+  split_group_key: split_group
+  train_group: train
+  validation_group: validation
+  test_group: test
+  donor_key: mouse_id       # kept for compatibility with config.yaml; unused by train_v2.py
+  ad_label: 5XFAD
+  control_label: WT
+
+output:
+  models_subdir: models
+  gene_importance_subdir: gene_importance
+  peak_importance_subdir: peak_importance
+  metrics_filename: fold_metrics.csv
+
+training:
+  seed: 42
+  batch_size: 64
+  max_epochs: 100
+  lr: 1e-3
+  patience: 10
+  # Validation cells come from adata.obs["split_group"] == "validation".
+  val_split: 0.1            # kept for compatibility with config.yaml; unused by train_v2.py
+  val_random_state: 42      # kept for compatibility with config.yaml; unused by train_v2.py
+  stratify: true            # kept for compatibility with config.yaml; unused by train_v2.py
+
+scheduler:
+  use_scheduler: true
+  save_best_model: true
+  early_stop_on_plateau: true
+  name: reduce_lr_on_plateau
+  mode: min
+  factor: 0.5
+  patience: 5
+  min_lr: 1e-6
+
+loss:
+  name: bce_with_logits
+
+model:
+  hidden_sizes: [64, 64]
+  activation: elu
+
+shap:
+  background_kmeans: 100
+
+metrics:
+  threshold_selection: youden
+  report_first_n_folds: 0
